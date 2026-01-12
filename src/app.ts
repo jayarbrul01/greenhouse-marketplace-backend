@@ -7,7 +7,7 @@ import { errorMiddleware } from "./middlewares/error.middleware.js";
 
 import authRoutes from "./modules/auth/auth.routes.js";
 import usersRoutes from "./modules/users/users.routes.js";
-// import listingsRoutes from "./modules/listings/listings.routes.js";
+import listingsRoutes from "./modules/listings/listings.routes.js";
 // import categoriesRoutes from "./modules/categories/categories.routes.js";
 // import mediaRoutes from "./modules/media/media.routes.js";
 // import wishlistRoutes from "./modules/wishlist/wishlist.routes.js";
@@ -26,7 +26,7 @@ app.get("/health", (_req, res) => res.json({ ok: true }));
 
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/users", usersRoutes);
-// app.use("/api/v1/listings", listingsRoutes);
+app.use("/api/v1/listings", listingsRoutes);
 // app.use("/api/v1/categories", categoriesRoutes);
 // app.use("/api/v1/media", mediaRoutes);
 // app.use("/api/v1/wishlist", wishlistRoutes);

@@ -1,0 +1,173 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum RoleName {
+  BUYER
+  SELLER
+  WISHLIST
+}
+
+enum ListingType {
+  PRODUCT
+  BUY_REQUEST
+  SERVICE
+  JOB
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+}
+
+model User {
+  id               String   @id @default(cuid())
+  email            String   @unique
+  phone            String   @unique
+  passwordHash     String
+  fullName         String?
+  region           String?
+  preferredLanguage String  @default("en")
+
+  emailVerified    Boolean  @default(false)
+  phoneVerified    Boolean  @default(false)
+  emailCode        String?
+  phoneCode        String?
+  emailCodeExpiresAt DateTime?
+  phoneCodeExpiresAt DateTime?
+
+  notifyEmail      Boolean  @default(true)
+  notifySms        Boolean  @default(false)
+  notifyInApp      Boolean  @default(true)
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  roles            UserRole[]
+  listings         Listing[]
+  wishlist         WishlistItem[]
+  notifications    Notification[]
+  refreshTokens    RefreshToken[]
+}
+
+model Role {
+  id   String   @id @default(cuid())
+  name RoleName @unique
+  users UserRole[]
+}
+
+model UserRole {
+  id     String @id @default(cuid())
+  userId String
+  roleId String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
+  @@index([userId])
+  @@index([roleId])
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+
+  listings ListingCategory[]
+}
+
+model Listing {
+  id          String      @id @default(cuid())
+  ownerId     String
+  type        ListingType
+  title       String
+  description String?
+  price       Float?
+  currency    String      @default("USD")
+  region      String?
+  status      String      @default("ACTIVE")
+
+  contactEmailVisible Boolean @default(false)
+  contactPhoneVisible Boolean @default(false)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  owner       User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  categories  ListingCategory[]
+  media       Media[]
+  wishlistedBy WishlistItem[]
+
+  @@index([type])
+  @@index([region])
+  @@index([price])
+}
+
+model ListingCategory {
+  id         String @id @default(cuid())
+  listingId  String
+  categoryId String
+
+  listing  Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([listingId, categoryId])
+  @@index([listingId])
+  @@index([categoryId])
+}
+
+model Media {
+  id        String    @id @default(cuid())
+  listingId String
+  type      MediaType
+  url       String
+  createdAt DateTime  @default(now())
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+}
+
+model WishlistItem {
+  id        String   @id @default(cuid())
+  userId    String
+  listingId String
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, listingId])
+  @@index([userId])
+  @@index([listingId])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  message   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}

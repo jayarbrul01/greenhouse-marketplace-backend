@@ -207,6 +207,64 @@ export const authService = {
     }
   },
 
+  async checkFirebasePhoneVerification(input: { idToken: string }) {
+    try {
+      // Verify the Firebase ID token
+      const decodedToken = await firebaseAdmin.auth().verifyIdToken(input.idToken);
+      
+      if (!decodedToken.email) {
+        throw new HttpError(400, "Firebase token missing email");
+      }
+
+      const firebaseEmail = decodedToken.email;
+      const phoneNumber = decodedToken.phone_number;
+      const phoneVerified = !!phoneNumber; // Firebase phone is verified if it exists
+
+      // Find user by email
+      const user = await prisma.user.findUnique({
+        where: { email: firebaseEmail }
+      });
+
+      if (!user) {
+        throw new HttpError(404, "User not found");
+      }
+
+      // Update phone and verification status if changed
+      const updates: any = {};
+      if (phoneNumber && phoneNumber !== user.phone) {
+        updates.phone = phoneNumber;
+      }
+      if (user.phoneVerified !== phoneVerified) {
+        updates.phoneVerified = phoneVerified;
+      }
+
+      if (Object.keys(updates).length > 0) {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: updates
+        });
+      }
+
+      return {
+        phoneVerified: phoneVerified,
+        phoneNumber: phoneNumber || user.phone,
+        message: phoneVerified 
+          ? "Phone verified successfully!" 
+          : "Phone not yet verified. Please verify your phone number."
+      };
+    } catch (error: any) {
+      if (error instanceof HttpError) throw error;
+      // Handle Firebase-specific errors
+      if (error.code === "auth/id-token-expired" || error.code === "auth/id-token-revoked") {
+        throw new HttpError(401, "Firebase token expired or revoked");
+      }
+      if (error.code === "auth/argument-error") {
+        throw new HttpError(400, "Invalid Firebase token");
+      }
+      throw new HttpError(401, "Invalid Firebase token");
+    }
+  },
+
   async googleAuth(input: { idToken: string }) {
     const client = new OAuth2Client(env.GOOGLE_CLIENT_ID);
     

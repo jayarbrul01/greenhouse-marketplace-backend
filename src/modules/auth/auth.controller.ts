@@ -40,6 +40,12 @@ export const authController = {
     res.json(out);
   },
 
+  checkFirebasePhoneVerification: async (req: Request, res: Response) => {
+    const { body } = (req as any).validated;
+    const out = await authService.checkFirebasePhoneVerification(body);
+    res.json(out);
+  },
+
   googleAuth: async (req: Request, res: Response) => {
     const { body } = (req as any).validated;
     const out = await authService.googleAuth(body);

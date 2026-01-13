@@ -314,7 +314,7 @@ export const authService = {
 
       if (!user) {
         // Create new user with Firebase auth
-        // If phone is not provided, generate a placeholder (user can update later)
+        // If phone is not provided (e.g., Google sign-in), generate a placeholder (user can update later)
         const userPhone = phoneNumber;
         
         // Use provided roles or default to BUYER

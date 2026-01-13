@@ -1,2 +1,0 @@
-export {};
-//# sourceMappingURL=categories.routes.d.ts.map

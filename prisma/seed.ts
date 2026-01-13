@@ -1,7 +1,14 @@
 import "dotenv/config";
-import { PrismaClient, RoleName } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
+
+// Import PrismaClient using namespace import to work around ESM re-export issues
+// Note: Prisma Client must be generated first (run: npx prisma generate)
+import * as Prisma from "@prisma/client";
+const { PrismaClient } = Prisma as any;
+
+// Define RoleName type manually until Prisma Client is generated
+type RoleName = "BUYER" | "SELLER" | "WISHLIST";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);

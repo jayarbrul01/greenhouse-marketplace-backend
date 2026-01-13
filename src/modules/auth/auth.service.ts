@@ -396,7 +396,7 @@ export const authService = {
             passwordHash: "", // No password for Firebase auth
             fullName: firebaseName,
             emailVerified: emailVerified, // Use Firebase verification status
-            phoneVerified: phoneNumber ? true : false, // If phone came from Firebase, it's verified
+            phoneVerified: false, // If phone came from Firebase, it's verified
             roles: {
               create: await Promise.all(rolePromises)
             }

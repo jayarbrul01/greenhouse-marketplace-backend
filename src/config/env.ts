@@ -16,5 +16,6 @@ export const env = {
   JWT_REFRESH_SECRET: req("JWT_REFRESH_SECRET"),
   JWT_ACCESS_EXPIRES_IN: process.env.JWT_ACCESS_EXPIRES_IN || "15m",
   JWT_REFRESH_EXPIRES_IN: process.env.JWT_REFRESH_EXPIRES_IN || "30d",
-  GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || "216743925444-3lcjuuf86k79v0781fsnoo2p7j65h3fp.apps.googleusercontent.com"
+  GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || "216743925444-3lcjuuf86k79v0781fsnoo2p7j65h3fp.apps.googleusercontent.com",
+  FIREBASE_PROJECT_ID: process.env.FIREBASE_PROJECT_ID || "mail-authentication-d0a3b"
 };

@@ -39,3 +39,17 @@ export const GoogleAuthSchema = z.object({
     idToken: z.string().min(10)
   })
 });
+
+export const FirebaseAuthSchema = z.object({
+  body: z.object({
+    idToken: z.string().min(10),
+    phone: z.string().min(7).optional(),
+    roles: z.array(z.enum(["BUYER", "SELLER", "WISHLIST"])).min(1).optional()
+  })
+});
+
+export const CheckFirebaseVerificationSchema = z.object({
+  body: z.object({
+    idToken: z.string().min(10)
+  })
+});

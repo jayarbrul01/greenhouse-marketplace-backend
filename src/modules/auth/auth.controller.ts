@@ -34,9 +34,21 @@ export const authController = {
     res.json(out);
   },
 
+  checkFirebaseEmailVerification: async (req: Request, res: Response) => {
+    const { body } = (req as any).validated;
+    const out = await authService.checkFirebaseEmailVerification(body);
+    res.json(out);
+  },
+
   googleAuth: async (req: Request, res: Response) => {
     const { body } = (req as any).validated;
     const out = await authService.googleAuth(body);
+    res.json(out);
+  },
+
+  firebaseAuth: async (req: Request, res: Response) => {
+    const { body } = (req as any).validated;
+    const out = await authService.firebaseAuth(body);
     res.json(out);
   }
 };

@@ -94,7 +94,16 @@ export const listingsService = {
     });
 
     // Transform listings to include category names
-    const items = listings.map((listing) => ({
+    const items = listings.map((listing: {
+      id: string;
+      title: string;
+      type: string;
+      price: number | null;
+      currency: string;
+      region: string | null;
+      description: string | null;
+      categories: Array<{ category: { name: string } }>;
+    }) => ({
       id: listing.id,
       title: listing.title,
       type: listing.type,

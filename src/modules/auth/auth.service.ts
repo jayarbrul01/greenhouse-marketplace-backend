@@ -44,8 +44,18 @@ export const authService = {
         roles: {
           create: await Promise.all(
             input.roles.map(async (r) => {
-              const role = await prisma.role.findUnique({ where: { name: r as any } });
-              if (!role) throw new HttpError(400, `Invalid role: ${r}`);
+              let role = await prisma.role.findUnique({ where: { name: r as any } });
+              if (!role) {
+                // Auto-create role if it doesn't exist (for BUYER, SELLER, WISHLIST)
+                const validRoles = ["BUYER", "SELLER", "WISHLIST"];
+                if (!validRoles.includes(r)) {
+                  throw new HttpError(400, `Invalid role: ${r}`);
+                }
+                // Create the role
+                role = await prisma.role.create({
+                  data: { name: r as any }
+                });
+              }
               return { roleId: role.id };
             })
           )
@@ -296,8 +306,13 @@ export const authService = {
         const randomPhone = `+1${Math.floor(1000000000 + Math.random() * 9000000000)}`;
         
         // Assign default role (BUYER) for Google signups
-        const buyerRole = await prisma.role.findUnique({ where: { name: "BUYER" } });
-        if (!buyerRole) throw new HttpError(500, "Default role not found");
+        let buyerRole = await prisma.role.findUnique({ where: { name: "BUYER" } });
+        if (!buyerRole) {
+          // Auto-create BUYER role if it doesn't exist
+          buyerRole = await prisma.role.create({
+            data: { name: "BUYER" }
+          });
+        }
 
         user = await prisma.user.create({
           data: {
@@ -348,7 +363,7 @@ export const authService = {
     }
   },
 
-  async firebaseAuth(input: { idToken: string; phone?: string; roles?: string[] }) {
+  async firebaseAuth(input: { idToken: string; phone?: string; password?: string; roles?: string[] }) {
     try {
       // Verify the Firebase ID token
       const decodedToken = await firebaseAdmin.auth().verifyIdToken(input.idToken);
@@ -362,6 +377,11 @@ export const authService = {
       const firebaseUid = decodedToken.uid;
       const emailVerified = decodedToken.email_verified || false;
       const phoneNumber = input.phone;
+
+      // Hash password if provided
+      const passwordHash = input.password 
+        ? await hashPassword(input.password)
+        : "";
 
       // Find or create user
       let user = await prisma.user.findUnique({
@@ -384,7 +404,15 @@ export const authService = {
         const rolePromises = rolesToAssign.map(async (roleName) => {
           let role = await prisma.role.findUnique({ where: { name: roleName as any } });
           if (!role) {
-            throw new HttpError(400, `Invalid role: ${roleName}`);
+            // Auto-create role if it doesn't exist (for BUYER, SELLER, WISHLIST)
+            const validRoles = ["BUYER", "SELLER", "WISHLIST"];
+            if (!validRoles.includes(roleName)) {
+              throw new HttpError(400, `Invalid role: ${roleName}`);
+            }
+            // Create the role
+            role = await prisma.role.create({
+              data: { name: roleName as any }
+            });
           }
           return { roleId: role.id };
         });
@@ -393,7 +421,7 @@ export const authService = {
           data: {
             email: firebaseEmail,
             phone: userPhone,
-            passwordHash: "", // No password for Firebase auth
+            passwordHash: passwordHash, // Save hashed password if provided
             fullName: firebaseName,
             emailVerified: emailVerified, // Use Firebase verification status
             phoneVerified: false, // If phone came from Firebase, it's verified
@@ -405,17 +433,24 @@ export const authService = {
         isNewUser = true;
       } else {
         // Existing user - update email verification status from Firebase
+        const updates: any = {};
         if (user.emailVerified !== emailVerified) {
-          await prisma.user.update({
-            where: { id: user.id },
-            data: { emailVerified: emailVerified }
-          });
+          updates.emailVerified = emailVerified;
         }
         // Update phone if provided and different
         if (phoneNumber && phoneNumber !== user.phone) {
+          updates.phone = phoneNumber;
+          updates.phoneVerified = false;
+        }
+        // Update password if provided (for users who signed up with Google and later set a password)
+        if (passwordHash && passwordHash !== user.passwordHash) {
+          updates.passwordHash = passwordHash;
+        }
+        
+        if (Object.keys(updates).length > 0) {
           await prisma.user.update({
             where: { id: user.id },
-            data: { phone: phoneNumber, phoneVerified: false }
+            data: updates
           });
         }
       }

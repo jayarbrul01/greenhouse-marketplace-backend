@@ -44,6 +44,7 @@ export const FirebaseAuthSchema = z.object({
   body: z.object({
     idToken: z.string().min(10),
     phone: z.string().min(7).optional(),
+    password: z.string().min(8).optional(),
     roles: z.array(z.enum(["BUYER", "SELLER", "WISHLIST"])).min(1).optional()
   })
 });

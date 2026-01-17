@@ -5,12 +5,25 @@ import multer from "multer";
 
 // Configure multer for memory storage
 const storage = multer.memoryStorage();
-export const upload = multer({
+
+// Image upload middleware (10MB limit)
+export const uploadImage = multer({
   storage,
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit
+    fileSize: 10 * 1024 * 1024, // 10MB limit for images
   },
 });
+
+// Video upload middleware (50MB limit)
+export const uploadVideo = multer({
+  storage,
+  limits: {
+    fileSize: 50 * 1024 * 1024, // 50MB limit for videos
+  },
+});
+
+// Default upload (for backward compatibility)
+export const upload = uploadImage;
 
 export const uploadController = {
   async uploadImage(req: AuthedRequest, res: Response) {

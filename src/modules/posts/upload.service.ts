@@ -1,126 +1,170 @@
-import { promises as fs } from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
 import { HttpError } from "../../utils/errors.js";
-import { env } from "../../config/env.js";
+import { supabase, STORAGE_BUCKETS } from "../../config/supabase.js";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Base upload directory (relative to backend root)
-const UPLOAD_BASE_DIR = path.join(__dirname, "../../../uploads");
-const IMAGES_DIR = path.join(UPLOAD_BASE_DIR, "images");
-const VIDEOS_DIR = path.join(UPLOAD_BASE_DIR, "videos");
-
-// Ensure upload directories exist
-async function ensureDirectoriesExist() {
-  try {
-    await fs.mkdir(IMAGES_DIR, { recursive: true });
-    await fs.mkdir(VIDEOS_DIR, { recursive: true });
-  } catch (error: any) {
-    console.error("Failed to create upload directories:", error);
-    throw new HttpError(500, "Failed to initialize upload directories");
-  }
+/**
+ * Generate a unique file path for Supabase storage
+ */
+function generateFilePath(userId: string, fileName: string, type: "image" | "video"): string {
+  const timestamp = Date.now();
+  const sanitizedFileName = fileName.replace(/[^a-zA-Z0-9.-]/g, "_");
+  const filePath = `${userId}/${timestamp}-${sanitizedFileName}`;
+  return filePath;
 }
 
-// Initialize directories on module load
-ensureDirectoriesExist().catch(console.error);
-
-// Get public URL for uploaded file
-function getPublicUrl(filePath: string, type: "image" | "video"): string {
-  // Get the API base URL (backend URL)
-  const apiBaseUrl = env.API_BASE_URL.replace(/\/$/, ""); // Remove trailing slash
+/**
+ * Get the content type based on file extension
+ */
+function getContentType(fileName: string, type: "image" | "video"): string {
+  const ext = fileName.split(".").pop()?.toLowerCase() || "";
   
-  // Get relative path from UPLOAD_BASE_DIR
-  const relativePath = path.relative(UPLOAD_BASE_DIR, filePath).replace(/\\/g, "/");
-  
-  return `${apiBaseUrl}/uploads/${relativePath}`;
+  if (type === "image") {
+    const imageTypes: Record<string, string> = {
+      jpg: "image/jpeg",
+      jpeg: "image/jpeg",
+      png: "image/png",
+      gif: "image/gif",
+      webp: "image/webp",
+      svg: "image/svg+xml",
+    };
+    return imageTypes[ext] || "image/jpeg";
+  } else {
+    const videoTypes: Record<string, string> = {
+      mp4: "video/mp4",
+      webm: "video/webm",
+      ogg: "video/ogg",
+      mov: "video/quicktime",
+      avi: "video/x-msvideo",
+    };
+    return videoTypes[ext] || "video/mp4";
+  }
 }
 
 export const uploadService = {
   async uploadImage(file: Buffer, fileName: string, userId: string) {
-    console.log("=== uploadService.uploadImage ===");
+    console.log("=== uploadService.uploadImage (Supabase) ===");
     console.log("File name:", fileName);
     console.log("User ID:", userId);
     console.log("File buffer size:", file.length, "bytes");
     
-    const fileExt = fileName.split(".").pop()?.toLowerCase() || "jpg";
-    const timestamp = Date.now();
-    const sanitizedFileName = `${timestamp}-${fileName.replace(/[^a-zA-Z0-9.-]/g, "_")}`;
-    const userDir = path.join(IMAGES_DIR, userId);
-    const filePath = path.join(userDir, sanitizedFileName);
+    const bucket = STORAGE_BUCKETS.IMAGES;
+    const filePath = generateFilePath(userId, fileName, "image");
+    const contentType = getContentType(fileName, "image");
     
-    console.log("Target file path:", filePath);
-    console.log("Content type:", `image/${fileExt}`);
+    console.log("Uploading to Supabase Storage:");
+    console.log("Bucket:", bucket);
+    console.log("File path:", filePath);
+    console.log("Content type:", contentType);
 
     try {
-      // Ensure user directory exists
-      await fs.mkdir(userDir, { recursive: true });
+      // Upload file to Supabase Storage
+      const { data, error } = await supabase.storage
+        .from(bucket)
+        .upload(filePath, file, {
+          contentType,
+          upsert: false, // Don't overwrite existing files
+        });
 
-      // Write file to disk
-      await fs.writeFile(filePath, file);
-      console.log("File uploaded successfully to:", filePath);
+      if (error) {
+        console.error("Supabase upload error:", error);
+        throw new HttpError(500, `Failed to upload image to Supabase: ${error.message}`);
+      }
 
-      // Generate public URL
-      const publicUrl = getPublicUrl(filePath, "image");
-      const relativePath = path.relative(UPLOAD_BASE_DIR, filePath).replace(/\\/g, "/");
+      console.log("File uploaded successfully to Supabase:", data.path);
 
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from(bucket)
+        .getPublicUrl(filePath);
+
+      const publicUrl = urlData.publicUrl;
       console.log("Public URL:", publicUrl);
-      console.log("Returning:", { url: publicUrl, path: relativePath });
-      return { url: publicUrl, path: relativePath };
+      console.log("Returning:", { url: publicUrl, path: filePath });
+
+      return { url: publicUrl, path: filePath };
     } catch (error: any) {
       console.error("File upload error:", error);
+      if (error instanceof HttpError) {
+        throw error;
+      }
       throw new HttpError(500, `Failed to upload image: ${error.message}`);
     }
   },
 
   async uploadVideo(file: Buffer, fileName: string, userId: string) {
-    console.log("=== uploadService.uploadVideo ===");
+    console.log("=== uploadService.uploadVideo (Supabase) ===");
     console.log("File name:", fileName);
     console.log("User ID:", userId);
     console.log("File buffer size:", file.length, "bytes");
 
-    const fileExt = fileName.split(".").pop()?.toLowerCase() || "mp4";
-    const timestamp = Date.now();
-    const sanitizedFileName = `${timestamp}-${fileName.replace(/[^a-zA-Z0-9.-]/g, "_")}`;
-    const userDir = path.join(VIDEOS_DIR, userId);
-    const filePath = path.join(userDir, sanitizedFileName);
+    const bucket = STORAGE_BUCKETS.VIDEOS;
+    const filePath = generateFilePath(userId, fileName, "video");
+    const contentType = getContentType(fileName, "video");
+    
+    console.log("Uploading to Supabase Storage:");
+    console.log("Bucket:", bucket);
+    console.log("File path:", filePath);
+    console.log("Content type:", contentType);
 
     try {
-      // Ensure user directory exists
-      await fs.mkdir(userDir, { recursive: true });
+      // Upload file to Supabase Storage
+      const { data, error } = await supabase.storage
+        .from(bucket)
+        .upload(filePath, file, {
+          contentType,
+          upsert: false, // Don't overwrite existing files
+        });
 
-      // Write file to disk
-      await fs.writeFile(filePath, file);
-      console.log("File uploaded successfully to:", filePath);
+      if (error) {
+        console.error("Supabase upload error:", error);
+        throw new HttpError(500, `Failed to upload video to Supabase: ${error.message}`);
+      }
 
-      // Generate public URL
-      const publicUrl = getPublicUrl(filePath, "video");
-      const relativePath = path.relative(UPLOAD_BASE_DIR, filePath).replace(/\\/g, "/");
+      console.log("File uploaded successfully to Supabase:", data.path);
 
-      return { url: publicUrl, path: relativePath };
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from(bucket)
+        .getPublicUrl(filePath);
+
+      const publicUrl = urlData.publicUrl;
+      console.log("Public URL:", publicUrl);
+
+      return { url: publicUrl, path: filePath };
     } catch (error: any) {
       console.error("File upload error:", error);
+      if (error instanceof HttpError) {
+        throw error;
+      }
       throw new HttpError(500, `Failed to upload video: ${error.message}`);
     }
   },
 
-  async deleteFile(filePath: string) {
+  async deleteFile(filePath: string, type: "image" | "video") {
     try {
-      // filePath should be relative to UPLOAD_BASE_DIR
-      const fullPath = path.join(UPLOAD_BASE_DIR, filePath);
+      const bucket = type === "image" ? STORAGE_BUCKETS.IMAGES : STORAGE_BUCKETS.VIDEOS;
       
-      // Check if file exists
-      await fs.access(fullPath);
-      
-      // Delete file
-      await fs.unlink(fullPath);
-      
+      console.log("Deleting file from Supabase Storage:");
+      console.log("Bucket:", bucket);
+      console.log("File path:", filePath);
+
+      const { error } = await supabase.storage
+        .from(bucket)
+        .remove([filePath]);
+
+      if (error) {
+        // If file doesn't exist, consider it already deleted
+        if (error.message.includes("not found") || error.message.includes("does not exist")) {
+          console.log("File not found, considering it already deleted");
+          return { success: true };
+        }
+        throw new HttpError(500, `Failed to delete file: ${error.message}`);
+      }
+
+      console.log("File deleted successfully from Supabase");
       return { success: true };
     } catch (error: any) {
-      if (error.code === "ENOENT") {
-        // File doesn't exist, consider it already deleted
-        return { success: true };
+      if (error instanceof HttpError) {
+        throw error;
       }
       throw new HttpError(500, `Failed to delete file: ${error.message}`);
     }

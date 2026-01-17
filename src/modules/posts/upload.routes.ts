@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { requireAuth } from "../../middlewares/auth.middleware.js";
 import { requireRole } from "../../middlewares/role.middleware.js";
-import { uploadController, upload } from "./upload.controller.js";
+import { uploadController, uploadImage, uploadVideo } from "./upload.controller.js";
 
 const r = Router();
 
@@ -10,9 +10,9 @@ r.use(requireAuth);
 r.use(requireRole(["SELLER"]));
 
 // Upload image
-r.post("/image", upload.single("file"), uploadController.uploadImage);
+r.post("/image", uploadImage.single("file"), uploadController.uploadImage);
 
 // Upload video
-r.post("/video", upload.single("file"), uploadController.uploadVideo);
+r.post("/video", uploadVideo.single("file"), uploadController.uploadVideo);
 
 export default r;

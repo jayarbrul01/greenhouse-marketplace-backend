@@ -303,7 +303,7 @@ export const authService = {
       if (!user) {
         // Create new user with Google auth
         // Generate a random phone number placeholder (user can update later)
-        const randomPhone = `+1${Math.floor(1000000000 + Math.random() * 9000000000)}`;
+        // const randomPhone = `+1${Math.floor(1000000000 + Math.random() * 9000000000)}`;
         
         // Assign default role (BUYER) for Google signups
         let buyerRole = await prisma.role.findUnique({ where: { name: "BUYER" } });
@@ -317,7 +317,7 @@ export const authService = {
         user = await prisma.user.create({
           data: {
             email: googleEmail,
-            phone: randomPhone,
+            // phone: randomPhone,
             passwordHash: "", // No password for Google auth
             fullName: googleName,
             emailVerified: true, // Google emails are pre-verified
@@ -366,7 +366,26 @@ export const authService = {
   async firebaseAuth(input: { idToken: string; phone?: string; password?: string; roles?: string[] }) {
     try {
       // Verify the Firebase ID token
-      const decodedToken = await firebaseAdmin.auth().verifyIdToken(input.idToken);
+      if (!input.idToken || input.idToken.trim().length === 0) {
+        throw new HttpError(400, "Firebase ID token is required");
+      }
+
+      let decodedToken;
+      try {
+        decodedToken = await firebaseAdmin.auth().verifyIdToken(input.idToken);
+      } catch (verifyError: any) {
+        console.error("Firebase token verification error:", verifyError);
+        if (verifyError.code === "auth/id-token-expired") {
+          throw new HttpError(401, "Firebase token expired");
+        }
+        if (verifyError.code === "auth/id-token-revoked") {
+          throw new HttpError(401, "Firebase token revoked");
+        }
+        if (verifyError.code === "auth/argument-error") {
+          throw new HttpError(400, "Invalid Firebase token format");
+        }
+        throw new HttpError(401, `Firebase token verification failed: ${verifyError.message || verifyError.code || "Unknown error"}`);
+      }
       
       if (!decodedToken.email) {
         throw new HttpError(400, "Firebase token missing email");
@@ -392,8 +411,23 @@ export const authService = {
 
       if (!user) {
         // Create new user with Firebase auth
-        // If phone is not provided (e.g., Google sign-in), generate a placeholder (user can update later)
-        const userPhone = phoneNumber;
+        // If phone is not provided (e.g., Google sign-in), generate a unique placeholder (user can update later)
+        let userPhone = phoneNumber;
+        if (!userPhone) {
+          // Generate a unique phone number placeholder based on Firebase UID
+          // Format: +1 followed by a hash of the UID to ensure uniqueness
+          const uidHash = firebaseUid.slice(0, 10).replace(/[^0-9]/g, '') || '0000000000';
+          userPhone = `+1${uidHash.padStart(10, '0')}`;
+          
+          // Ensure uniqueness by checking if this phone already exists
+          let existingUser = await prisma.user.findUnique({ where: { phone: userPhone } });
+          let counter = 1;
+          while (existingUser) {
+            userPhone = `+1${uidHash.padStart(9, '0')}${counter}`;
+            existingUser = await prisma.user.findUnique({ where: { phone: userPhone } });
+            counter++;
+          }
+        }
         
         // Use provided roles or default to BUYER
         const rolesToAssign = input.roles && input.roles.length > 0 
@@ -476,6 +510,14 @@ export const authService = {
       };
     } catch (error: any) {
       if (error instanceof HttpError) throw error;
+      
+      // Log the full error for debugging
+      console.error("Firebase auth error:", {
+        code: error.code,
+        message: error.message,
+        stack: error.stack
+      });
+      
       // Handle Firebase-specific errors
       if (error.code === "auth/id-token-expired" || error.code === "auth/id-token-revoked") {
         throw new HttpError(401, "Firebase token expired or revoked");
@@ -483,7 +525,13 @@ export const authService = {
       if (error.code === "auth/argument-error") {
         throw new HttpError(400, "Invalid Firebase token");
       }
-      throw new HttpError(401, "Invalid Firebase token");
+      if (error.code === "app/no-app") {
+        throw new HttpError(500, "Firebase Admin SDK not initialized. Please check your Firebase configuration.");
+      }
+      
+      // Return more detailed error message
+      const errorMessage = error.message || error.code || "Unknown error";
+      throw new HttpError(401, `Firebase authentication failed: ${errorMessage}`);
     }
   }
 };

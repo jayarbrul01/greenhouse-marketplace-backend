@@ -1,0 +1,488 @@
+import { prisma } from "../../config/prisma.js";
+import { HttpError } from "../../utils/errors.js";
+import { hashPassword, verifyPassword } from "../../utils/password.js";
+import { randomCode } from "../../utils/random.js";
+import { signAccessToken, signRefreshToken, verifyRefreshToken } from "../../config/jwt.js";
+import { OAuth2Client } from "google-auth-library";
+import bcrypt from "bcrypt";
+import { env } from "../../config/env.js";
+import { firebaseAdmin } from "../../config/firebase.js";
+function addMinutes(date, mins) {
+    return new Date(date.getTime() + mins * 60000);
+}
+async function getUserRoles(userId) {
+    const roles = await prisma.userRole.findMany({
+        where: { userId },
+        include: { role: true }
+    });
+    return roles.map((r) => r.role.name);
+}
+export const authService = {
+    async register(input) {
+        const exists = await prisma.user.findFirst({
+            where: { OR: [{ email: input.email }, { phone: input.phone }] }
+        });
+        if (exists)
+            throw new HttpError(409, "Email or phone already in use");
+        const passwordHash = await hashPassword(input.password);
+        const emailCode = randomCode(6);
+        const phoneCode = randomCode(6);
+        const user = await prisma.user.create({
+            data: {
+                email: input.email,
+                phone: input.phone,
+                passwordHash,
+                emailCode,
+                phoneCode,
+                emailCodeExpiresAt: addMinutes(new Date(), 30),
+                phoneCodeExpiresAt: addMinutes(new Date(), 30),
+                roles: {
+                    create: await Promise.all(input.roles.map(async (r) => {
+                        let role = await prisma.role.findUnique({ where: { name: r } });
+                        if (!role) {
+                            // Auto-create role if it doesn't exist (for BUYER, SELLER, WISHLIST)
+                            const validRoles = ["BUYER", "SELLER", "WISHLIST"];
+                            if (!validRoles.includes(r)) {
+                                throw new HttpError(400, `Invalid role: ${r}`);
+                            }
+                            // Create the role
+                            role = await prisma.role.create({
+                                data: { name: r }
+                            });
+                        }
+                        return { roleId: role.id };
+                    }))
+                }
+            }
+        });
+        const roles = await getUserRoles(user.id);
+        const accessToken = signAccessToken({ sub: user.id, roles });
+        const refreshToken = signRefreshToken({ sub: user.id, roles });
+        // Store refresh token hash
+        await prisma.refreshToken.create({
+            data: {
+                userId: user.id,
+                tokenHash: await bcrypt.hash(refreshToken, 10),
+                expiresAt: addMinutes(new Date(), 60 * 24 * 30) // ~30 days
+            }
+        });
+        return {
+            user: { id: user.id, email: user.email, phone: user.phone, roles },
+            accessToken,
+            refreshToken,
+            // DEV helper (remove in production):
+            devVerification: { emailCode, phoneCode }
+        };
+    },
+    async login(input) {
+        const user = await prisma.user.findFirst({
+            where: { OR: [{ email: input.emailOrPhone }, { phone: input.emailOrPhone }] }
+        });
+        if (!user)
+            throw new HttpError(401, "Invalid credentials");
+        const ok = await verifyPassword(input.password, user.passwordHash);
+        if (!ok)
+            throw new HttpError(401, "Invalid credentials");
+        const roles = await getUserRoles(user.id);
+        const accessToken = signAccessToken({ sub: user.id, roles });
+        const refreshToken = signRefreshToken({ sub: user.id, roles });
+        await prisma.refreshToken.create({
+            data: {
+                userId: user.id,
+                tokenHash: await bcrypt.hash(refreshToken, 10),
+                expiresAt: addMinutes(new Date(), 60 * 24 * 30)
+            }
+        });
+        return {
+            user: {
+                id: user.id,
+                email: user.email,
+                phone: user.phone,
+                emailVerified: user.emailVerified,
+                phoneVerified: user.phoneVerified,
+                roles
+            },
+            accessToken,
+            refreshToken
+        };
+    },
+    async refresh(input) {
+        const payload = verifyRefreshToken(input.refreshToken);
+        const userId = payload.sub;
+        const user = await prisma.user.findUnique({ where: { id: userId } });
+        if (!user)
+            throw new HttpError(401, "Invalid refresh token");
+        // Verify refresh token exists (by hash match)
+        const tokens = await prisma.refreshToken.findMany({ where: { userId } });
+        const match = await Promise.all(tokens.map((token) => bcrypt.compare(input.refreshToken, token.tokenHash)));
+        if (!match.some(Boolean))
+            throw new HttpError(401, "Invalid refresh token");
+        const roles = await getUserRoles(userId);
+        const accessToken = signAccessToken({ sub: userId, roles });
+        return { accessToken };
+    },
+    async verifyEmail(userId, code) {
+        const user = await prisma.user.findUnique({ where: { id: userId } });
+        if (!user)
+            throw new HttpError(404, "User not found");
+        if (!user.emailCode || !user.emailCodeExpiresAt)
+            throw new HttpError(400, "No email code requested");
+        if (user.emailCodeExpiresAt < new Date())
+            throw new HttpError(400, "Email code expired");
+        if (user.emailCode !== code)
+            throw new HttpError(400, "Invalid email code");
+        await prisma.user.update({
+            where: { id: userId },
+            data: { emailVerified: true, emailCode: null, emailCodeExpiresAt: null }
+        });
+        return { ok: true };
+    },
+    async verifyPhone(userId, code) {
+        const user = await prisma.user.findUnique({ where: { id: userId } });
+        if (!user)
+            throw new HttpError(404, "User not found");
+        if (!user.phoneCode || !user.phoneCodeExpiresAt)
+            throw new HttpError(400, "No phone code requested");
+        if (user.phoneCodeExpiresAt < new Date())
+            throw new HttpError(400, "Phone code expired");
+        if (user.phoneCode !== code)
+            throw new HttpError(400, "Invalid phone code");
+        await prisma.user.update({
+            where: { id: userId },
+            data: { phoneVerified: true, phoneCode: null, phoneCodeExpiresAt: null }
+        });
+        return { ok: true };
+    },
+    async checkFirebaseEmailVerification(input) {
+        try {
+            // Verify the Firebase ID token
+            const decodedToken = await firebaseAdmin.auth().verifyIdToken(input.idToken);
+            if (!decodedToken.email) {
+                throw new HttpError(400, "Firebase token missing email");
+            }
+            const firebaseEmail = decodedToken.email;
+            const emailVerified = decodedToken.email_verified || false;
+            // Find user by email
+            const user = await prisma.user.findUnique({
+                where: { email: firebaseEmail }
+            });
+            if (!user) {
+                throw new HttpError(404, "User not found");
+            }
+            // Update email verification status if it changed
+            if (user.emailVerified !== emailVerified) {
+                await prisma.user.update({
+                    where: { id: user.id },
+                    data: { emailVerified: emailVerified }
+                });
+            }
+            return {
+                emailVerified: emailVerified,
+                message: emailVerified
+                    ? "Email verified successfully!"
+                    : "Email not yet verified. Please check your email and click the verification link."
+            };
+        }
+        catch (error) {
+            if (error instanceof HttpError)
+                throw error;
+            // Handle Firebase-specific errors
+            if (error.code === "auth/id-token-expired" || error.code === "auth/id-token-revoked") {
+                throw new HttpError(401, "Firebase token expired or revoked");
+            }
+            if (error.code === "auth/argument-error") {
+                throw new HttpError(400, "Invalid Firebase token");
+            }
+            throw new HttpError(401, "Invalid Firebase token");
+        }
+    },
+    async checkFirebasePhoneVerification(input) {
+        try {
+            // Verify the Firebase ID token
+            const decodedToken = await firebaseAdmin.auth().verifyIdToken(input.idToken);
+            if (!decodedToken.email) {
+                throw new HttpError(400, "Firebase token missing email");
+            }
+            const firebaseEmail = decodedToken.email;
+            const phoneNumber = decodedToken.phone_number;
+            const phoneVerified = !!phoneNumber; // Firebase phone is verified if it exists
+            // Find user by email
+            const user = await prisma.user.findUnique({
+                where: { email: firebaseEmail }
+            });
+            if (!user) {
+                throw new HttpError(404, "User not found");
+            }
+            // Update phone and verification status if changed
+            const updates = {};
+            if (phoneNumber && phoneNumber !== user.phone) {
+                updates.phone = phoneNumber;
+            }
+            if (user.phoneVerified !== phoneVerified) {
+                updates.phoneVerified = phoneVerified;
+            }
+            if (Object.keys(updates).length > 0) {
+                await prisma.user.update({
+                    where: { id: user.id },
+                    data: updates
+                });
+            }
+            return {
+                phoneVerified: phoneVerified,
+                phoneNumber: phoneNumber || user.phone,
+                message: phoneVerified
+                    ? "Phone verified successfully!"
+                    : "Phone not yet verified. Please verify your phone number."
+            };
+        }
+        catch (error) {
+            if (error instanceof HttpError)
+                throw error;
+            // Handle Firebase-specific errors
+            if (error.code === "auth/id-token-expired" || error.code === "auth/id-token-revoked") {
+                throw new HttpError(401, "Firebase token expired or revoked");
+            }
+            if (error.code === "auth/argument-error") {
+                throw new HttpError(400, "Invalid Firebase token");
+            }
+            throw new HttpError(401, "Invalid Firebase token");
+        }
+    },
+    async googleAuth(input) {
+        const client = new OAuth2Client(env.GOOGLE_CLIENT_ID);
+        try {
+            const ticket = await client.verifyIdToken({
+                idToken: input.idToken,
+                audience: env.GOOGLE_CLIENT_ID,
+            });
+            const payload = ticket.getPayload();
+            if (!payload || !payload.email) {
+                throw new HttpError(400, "Invalid Google token");
+            }
+            const googleEmail = payload.email;
+            const googleName = payload.name || "";
+            const googlePicture = payload.picture || "";
+            // Find or create user
+            let user = await prisma.user.findUnique({
+                where: { email: googleEmail }
+            });
+            let isNewUser = false;
+            if (!user) {
+                // Create new user with Google auth
+                // Generate a random phone number placeholder (user can update later)
+                // const randomPhone = `+1${Math.floor(1000000000 + Math.random() * 9000000000)}`;
+                // Assign default role (BUYER) for Google signups
+                let buyerRole = await prisma.role.findUnique({ where: { name: "BUYER" } });
+                if (!buyerRole) {
+                    // Auto-create BUYER role if it doesn't exist
+                    buyerRole = await prisma.role.create({
+                        data: { name: "BUYER" }
+                    });
+                }
+                user = await prisma.user.create({
+                    data: {
+                        email: googleEmail,
+                        // phone: randomPhone,
+                        passwordHash: "", // No password for Google auth
+                        fullName: googleName,
+                        emailVerified: true, // Google emails are pre-verified
+                        phoneVerified: false,
+                        roles: {
+                            create: [{ roleId: buyerRole.id }]
+                        }
+                    }
+                });
+                isNewUser = true;
+            }
+            else {
+                // Existing user - mark email as verified if not already
+                if (!user.emailVerified) {
+                    await prisma.user.update({
+                        where: { id: user.id },
+                        data: { emailVerified: true }
+                    });
+                }
+            }
+            const roles = await getUserRoles(user.id);
+            const accessToken = signAccessToken({ sub: user.id, roles });
+            const refreshToken = signRefreshToken({ sub: user.id, roles });
+            // Store refresh token hash
+            await prisma.refreshToken.create({
+                data: {
+                    userId: user.id,
+                    tokenHash: await bcrypt.hash(refreshToken, 10),
+                    expiresAt: addMinutes(new Date(), 60 * 24 * 30) // ~30 days
+                }
+            });
+            return {
+                user: { id: user.id, email: user.email, phone: user.phone, roles },
+                accessToken,
+                refreshToken,
+                isNewUser
+            };
+        }
+        catch (error) {
+            if (error instanceof HttpError)
+                throw error;
+            throw new HttpError(401, "Invalid Google token");
+        }
+    },
+    async firebaseAuth(input) {
+        try {
+            // Verify the Firebase ID token
+            if (!input.idToken || input.idToken.trim().length === 0) {
+                throw new HttpError(400, "Firebase ID token is required");
+            }
+            let decodedToken;
+            try {
+                decodedToken = await firebaseAdmin.auth().verifyIdToken(input.idToken);
+            }
+            catch (verifyError) {
+                console.error("Firebase token verification error:", verifyError);
+                if (verifyError.code === "auth/id-token-expired") {
+                    throw new HttpError(401, "Firebase token expired");
+                }
+                if (verifyError.code === "auth/id-token-revoked") {
+                    throw new HttpError(401, "Firebase token revoked");
+                }
+                if (verifyError.code === "auth/argument-error") {
+                    throw new HttpError(400, "Invalid Firebase token format");
+                }
+                throw new HttpError(401, `Firebase token verification failed: ${verifyError.message || verifyError.code || "Unknown error"}`);
+            }
+            if (!decodedToken.email) {
+                throw new HttpError(400, "Firebase token missing email");
+            }
+            const firebaseEmail = decodedToken.email;
+            const firebaseName = decodedToken.name || "";
+            const firebaseUid = decodedToken.uid;
+            const emailVerified = decodedToken.email_verified || false;
+            const phoneNumber = input.phone;
+            // Hash password if provided
+            const passwordHash = input.password
+                ? await hashPassword(input.password)
+                : "";
+            // Find or create user
+            let user = await prisma.user.findUnique({
+                where: { email: firebaseEmail }
+            });
+            let isNewUser = false;
+            if (!user) {
+                // Create new user with Firebase auth
+                // If phone is not provided (e.g., Google sign-in), generate a unique placeholder (user can update later)
+                let userPhone = phoneNumber;
+                if (!userPhone) {
+                    // Generate a unique phone number placeholder based on Firebase UID
+                    // Format: +1 followed by a hash of the UID to ensure uniqueness
+                    const uidHash = firebaseUid.slice(0, 10).replace(/[^0-9]/g, '') || '0000000000';
+                    userPhone = `+1${uidHash.padStart(10, '0')}`;
+                    // Ensure uniqueness by checking if this phone already exists
+                    let existingUser = await prisma.user.findUnique({ where: { phone: userPhone } });
+                    let counter = 1;
+                    while (existingUser) {
+                        userPhone = `+1${uidHash.padStart(9, '0')}${counter}`;
+                        existingUser = await prisma.user.findUnique({ where: { phone: userPhone } });
+                        counter++;
+                    }
+                }
+                // Use provided roles or default to BUYER
+                const rolesToAssign = input.roles && input.roles.length > 0
+                    ? input.roles
+                    : ["BUYER"];
+                // Get or create roles
+                const rolePromises = rolesToAssign.map(async (roleName) => {
+                    let role = await prisma.role.findUnique({ where: { name: roleName } });
+                    if (!role) {
+                        // Auto-create role if it doesn't exist (for BUYER, SELLER, WISHLIST)
+                        const validRoles = ["BUYER", "SELLER", "WISHLIST"];
+                        if (!validRoles.includes(roleName)) {
+                            throw new HttpError(400, `Invalid role: ${roleName}`);
+                        }
+                        // Create the role
+                        role = await prisma.role.create({
+                            data: { name: roleName }
+                        });
+                    }
+                    return { roleId: role.id };
+                });
+                user = await prisma.user.create({
+                    data: {
+                        email: firebaseEmail,
+                        phone: userPhone,
+                        passwordHash: passwordHash, // Save hashed password if provided
+                        fullName: firebaseName,
+                        emailVerified: emailVerified, // Use Firebase verification status
+                        phoneVerified: false, // If phone came from Firebase, it's verified
+                        roles: {
+                            create: await Promise.all(rolePromises)
+                        }
+                    }
+                });
+                isNewUser = true;
+            }
+            else {
+                // Existing user - update email verification status from Firebase
+                const updates = {};
+                if (user.emailVerified !== emailVerified) {
+                    updates.emailVerified = emailVerified;
+                }
+                // Update phone if provided and different
+                if (phoneNumber && phoneNumber !== user.phone) {
+                    updates.phone = phoneNumber;
+                    updates.phoneVerified = false;
+                }
+                // Update password if provided (for users who signed up with Google and later set a password)
+                if (passwordHash && passwordHash !== user.passwordHash) {
+                    updates.passwordHash = passwordHash;
+                }
+                if (Object.keys(updates).length > 0) {
+                    await prisma.user.update({
+                        where: { id: user.id },
+                        data: updates
+                    });
+                }
+            }
+            const roles = await getUserRoles(user.id);
+            const accessToken = signAccessToken({ sub: user.id, roles });
+            const refreshToken = signRefreshToken({ sub: user.id, roles });
+            // Store refresh token hash
+            await prisma.refreshToken.create({
+                data: {
+                    userId: user.id,
+                    tokenHash: await bcrypt.hash(refreshToken, 10),
+                    expiresAt: addMinutes(new Date(), 60 * 24 * 30) // ~30 days
+                }
+            });
+            return {
+                user: { id: user.id, email: user.email, phone: user.phone, roles, emailVerified: user.emailVerified },
+                accessToken,
+                refreshToken,
+                isNewUser
+            };
+        }
+        catch (error) {
+            if (error instanceof HttpError)
+                throw error;
+            // Log the full error for debugging
+            console.error("Firebase auth error:", {
+                code: error.code,
+                message: error.message,
+                stack: error.stack
+            });
+            // Handle Firebase-specific errors
+            if (error.code === "auth/id-token-expired" || error.code === "auth/id-token-revoked") {
+                throw new HttpError(401, "Firebase token expired or revoked");
+            }
+            if (error.code === "auth/argument-error") {
+                throw new HttpError(400, "Invalid Firebase token");
+            }
+            if (error.code === "app/no-app") {
+                throw new HttpError(500, "Firebase Admin SDK not initialized. Please check your Firebase configuration.");
+            }
+            // Return more detailed error message
+            const errorMessage = error.message || error.code || "Unknown error";
+            throw new HttpError(401, `Firebase authentication failed: ${errorMessage}`);
+        }
+    }
+};
+//# sourceMappingURL=auth.service.js.map

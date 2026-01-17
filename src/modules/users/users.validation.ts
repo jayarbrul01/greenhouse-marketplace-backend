@@ -15,3 +15,9 @@ export const UpdatePrefsSchema = z.object({
     notifyInApp: z.boolean().optional()
   })
 });
+
+export const UpdateRolesSchema = z.object({
+  body: z.object({
+    roles: z.array(z.enum(["BUYER", "SELLER", "WISHLIST"])).min(1, "At least one role is required")
+  })
+});

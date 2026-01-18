@@ -121,7 +121,16 @@ export const postsService = {
     }
 
     if (options?.region) {
-      where.region = options.region;
+      // Support multiple regions (comma-separated or array)
+      const regions = Array.isArray(options.region) 
+        ? options.region 
+        : options.region.split(',').map(r => r.trim()).filter(r => r);
+      
+      if (regions.length > 0) {
+        where.region = {
+          in: regions,
+        };
+      }
     }
 
     if (options?.minPrice !== undefined || options?.maxPrice !== undefined) {

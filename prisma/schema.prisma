@@ -32,6 +32,7 @@ model User {
   fullName          String?
   region            String?
   preferredLanguage String  @default("en")
+  avatar            String? // Profile picture/avatar URL
 
   emailVerified      Boolean   @default(false)
   phoneVerified      Boolean   @default(false)

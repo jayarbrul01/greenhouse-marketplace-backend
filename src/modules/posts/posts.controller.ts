@@ -73,6 +73,29 @@ export const postsController = {
     res.json(result);
   },
 
+  async getPostsByUserId(req: Request, res: Response) {
+    const userId = req.params.userId as string;
+    const search = req.query.q as string | undefined;
+    const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 12;
+    
+    const options: {
+      search?: string;
+      page?: number;
+      limit?: number;
+    } = {
+      page,
+      limit,
+    };
+    
+    if (search) {
+      options.search = search;
+    }
+    
+    const result = await postsService.getPostsByUserId(userId, options);
+    res.json(result);
+  },
+
   async updatePost(req: AuthedRequest, res: Response) {
     const userId = req.user!.id;
     const postId = req.params.id as string;

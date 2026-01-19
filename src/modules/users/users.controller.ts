@@ -1,4 +1,4 @@
-import type { Response } from "express";
+import type { Request, Response } from "express";
 import { prisma } from "../../config/prisma.js";
 import type { AuthedRequest } from "../../middlewares/auth.middleware.js";
 import { HttpError } from "../../utils/errors.js";
@@ -26,7 +26,7 @@ export const usersController = {
         fullName: true, region: true, preferredLanguage: true,
         emailVerified: true, phoneVerified: true,
         notifyEmail: true, notifySms: true, notifyInApp: true,
-        createdAt: true
+        avatar: true, createdAt: true
       }
     });
     if (!user) throw new HttpError(404, "User not found");
@@ -41,7 +41,8 @@ export const usersController = {
       data: body,
       select: {
         id: true, email: true, phone: true,
-        fullName: true, region: true, preferredLanguage: true
+        fullName: true, region: true, preferredLanguage: true,
+        avatar: true
       }
     });
     res.json(user);
@@ -114,5 +115,23 @@ export const usersController = {
       accessToken,
       refreshToken
     });
+  },
+
+  getUserById: async (req: Request, res: Response) => {
+    const userId = req.params.id as string;
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        fullName: true,
+        createdAt: true,
+        emailVerified: true,
+        phoneVerified: true,
+        avatar: true,
+      }
+    });
+    if (!user) throw new HttpError(404, "User not found");
+    res.json({ user });
   }
 };

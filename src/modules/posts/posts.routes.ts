@@ -9,6 +9,7 @@ const r = Router();
 
 // Public routes (no auth required) - must be before authenticated routes
 r.get("/all", postsController.getAllPosts);
+r.get("/user/:userId", postsController.getPostsByUserId);
 r.get("/:id", postsController.getPost);
 
 // All other routes require authentication

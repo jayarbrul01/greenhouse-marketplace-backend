@@ -7,6 +7,7 @@ import { UpdateMeSchema, UpdatePrefsSchema, UpdateRolesSchema } from "./users.va
 const r = Router();
 
 r.get("/me", requireAuth, usersController.me);
+r.get("/:id", usersController.getUserById); // Public endpoint
 r.put("/me", requireAuth, validate(UpdateMeSchema), usersController.updateMe);
 r.put("/preferences", requireAuth, validate(UpdatePrefsSchema), usersController.updatePrefs);
 r.put("/roles", requireAuth, validate(UpdateRolesSchema), usersController.updateRoles);

@@ -106,6 +106,54 @@ export const postsService = {
     };
   },
 
+  async getPostsByUserId(userId: string, options?: {
+    search?: string;
+    page?: number;
+    limit?: number;
+  }) {
+    const where: any = {
+      userId: userId,
+    };
+    
+    if (options?.search) {
+      const searchTerm = options.search.trim();
+      where.AND = [
+        {
+          OR: [
+            { title: { contains: searchTerm, mode: "insensitive" } },
+            { information: { contains: searchTerm, mode: "insensitive" } },
+            { category: { contains: searchTerm, mode: "insensitive" } },
+            { region: { contains: searchTerm, mode: "insensitive" } },
+          ],
+        },
+      ];
+    }
+
+    const page = options?.page || 1;
+    const limit = options?.limit || 12;
+    const skip = (page - 1) * limit;
+
+    const [posts, total] = await Promise.all([
+      prisma.post.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+      }),
+      prisma.post.count({ where }),
+    ]);
+
+    const totalPages = Math.ceil(total / limit);
+
+    return {
+      posts,
+      total,
+      page,
+      limit,
+      totalPages,
+    };
+  },
+
   async getAllPosts(options?: {
     search?: string;
     category?: string;
@@ -173,6 +221,7 @@ export const postsService = {
               id: true,
               fullName: true,
               email: true,
+              avatar: true,
             },
           },
         },
@@ -202,6 +251,10 @@ export const postsService = {
             fullName: true,
             email: true,
             phone: true,
+            phoneVerified: true,
+            emailVerified: true,
+            createdAt: true,
+            avatar: true,
           },
         },
       },

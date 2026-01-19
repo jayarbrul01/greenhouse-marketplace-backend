@@ -4,7 +4,8 @@ export const UpdateMeSchema = z.object({
   body: z.object({
     fullName: z.string().min(1).optional(),
     region: z.string().min(1).optional(),
-    preferredLanguage: z.enum(["en", "es", "fr"]).optional()
+    preferredLanguage: z.enum(["en", "es", "fr"]).optional(),
+    avatar: z.string().url().optional().or(z.literal(""))
   })
 });
 

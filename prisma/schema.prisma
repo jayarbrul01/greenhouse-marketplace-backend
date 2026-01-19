@@ -25,40 +25,40 @@ enum MediaType {
 }
 
 model User {
-  id               String   @id @default(cuid())
-  email            String   @unique
-  phone            String   @unique
-  passwordHash     String
-  fullName         String?
-  region           String?
+  id                String  @id @default(cuid())
+  email             String  @unique
+  phone             String  @unique
+  passwordHash      String
+  fullName          String?
+  region            String?
   preferredLanguage String  @default("en")
 
-  emailVerified    Boolean  @default(false)
-  phoneVerified    Boolean  @default(false)
-  emailCode        String?
-  phoneCode        String?
+  emailVerified      Boolean   @default(false)
+  phoneVerified      Boolean   @default(false)
+  emailCode          String?
+  phoneCode          String?
   emailCodeExpiresAt DateTime?
   phoneCodeExpiresAt DateTime?
 
-  notifyEmail      Boolean  @default(true)
-  notifySms        Boolean  @default(false)
-  notifyInApp      Boolean  @default(true)
-  fcmToken         String?  // Firebase Cloud Messaging token for push notifications
+  notifyEmail Boolean @default(true)
+  notifySms   Boolean @default(false)
+  notifyInApp Boolean @default(true)
+  fcmToken    String? // Firebase Cloud Messaging token for push notifications
 
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  roles            UserRole[]
-  listings         Listing[]
-  wishlist         WishlistItem[]
-  notifications    Notification[]
-  refreshTokens    RefreshToken[]
-  posts            Post[]
+  roles         UserRole[]
+  listings      Listing[]
+  wishlist      WishlistItem[]
+  notifications Notification[]
+  refreshTokens RefreshToken[]
+  posts         Post[]
 }
 
 model Role {
-  id   String   @id @default(cuid())
-  name RoleName @unique
+  id    String     @id @default(cuid())
+  name  RoleName   @unique
   users UserRole[]
 }
 
@@ -97,12 +97,12 @@ model Listing {
   contactEmailVisible Boolean @default(false)
   contactPhoneVisible Boolean @default(false)
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  owner       User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  categories  ListingCategory[]
-  media       Media[]
+  owner        User              @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  categories   ListingCategory[]
+  media        Media[]
   wishlistedBy WishlistItem[]
 
   @@index([type])
@@ -155,11 +155,13 @@ model Notification {
   title     String
   message   String
   read      Boolean  @default(false)
+  postId    String? // Reference to the post/product this notification is about
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, read])
+  @@index([postId])
 }
 
 model RefreshToken {

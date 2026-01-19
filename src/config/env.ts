@@ -19,6 +19,8 @@ export const env = {
   JWT_REFRESH_EXPIRES_IN: process.env.JWT_REFRESH_EXPIRES_IN || "30d",
   GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || "216743925444-3lcjuuf86k79v0781fsnoo2p7j65h3fp.apps.googleusercontent.com",
   FIREBASE_PROJECT_ID: process.env.FIREBASE_PROJECT_ID || "mail-authentication-d0a3b",
+  FIREBASE_PRIVATE_KEY: process.env.FIREBASE_PRIVATE_KEY,
+  FIREBASE_CLIENT_EMAIL: process.env.FIREBASE_CLIENT_EMAIL,
   SUPABASE_URL: process.env.SUPABASE_URL || req("SUPABASE_URL"),
   SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || req("SUPABASE_SERVICE_ROLE_KEY"),
 };

@@ -1,5 +1,6 @@
 import { prisma } from "../../config/prisma.js";
 import { HttpError } from "../../utils/errors.js";
+import { notificationsService } from "../notifications/notifications.service.js";
 
 async function getUserRoles(userId: string) {
   const roles = await prisma.userRole.findMany({
@@ -38,6 +39,17 @@ export const postsService = {
         image: input.image || null,
         video: input.video || null,
       },
+    });
+
+    // Send push notification to all users (fire and forget - don't wait for it)
+    notificationsService.sendNewPostNotification({
+      id: post.id,
+      title: post.title,
+      category: post.category,
+      userId: post.userId,
+    }).catch((error) => {
+      console.error("Failed to send push notifications:", error);
+      // Don't throw - notification failure shouldn't break post creation
     });
 
     return { post };

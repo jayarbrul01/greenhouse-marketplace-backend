@@ -5,9 +5,9 @@ import { uploadController, uploadImage, uploadVideo } from "./upload.controller.
 
 const r = Router();
 
-// All routes require authentication and SELLER role
+// All routes require authentication and SELLER, BUYER, or WISHLIST role
 r.use(requireAuth);
-r.use(requireRole(["SELLER"]));
+r.use(requireRole(["SELLER", "BUYER", "WISHLIST"]));
 
 // Upload image
 r.post("/image", uploadImage.single("file"), uploadController.uploadImage);

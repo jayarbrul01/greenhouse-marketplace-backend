@@ -1,0 +1,19 @@
+import "dotenv/config";
+export declare const env: {
+    NODE_ENV: string;
+    PORT: number;
+    DATABASE_URL: string;
+    CORS_ORIGIN: string;
+    API_BASE_URL: string;
+    JWT_ACCESS_SECRET: string;
+    JWT_REFRESH_SECRET: string;
+    JWT_ACCESS_EXPIRES_IN: string;
+    JWT_REFRESH_EXPIRES_IN: string;
+    GOOGLE_CLIENT_ID: string;
+    FIREBASE_PROJECT_ID: string;
+    FIREBASE_PRIVATE_KEY: string | undefined;
+    FIREBASE_CLIENT_EMAIL: string | undefined;
+    SUPABASE_URL: string;
+    SUPABASE_SERVICE_ROLE_KEY: string;
+};
+//# sourceMappingURL=env.d.ts.map

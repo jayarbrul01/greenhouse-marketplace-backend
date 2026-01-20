@@ -309,6 +309,18 @@ export const postsService = {
       },
     });
 
+    // Notify users who have this post in their wishlist
+    try {
+      await notificationsService.sendPostUpdateNotification({
+        id: post.id,
+        title: post.title,
+        category: post.category,
+      });
+    } catch (error) {
+      // Log error but don't fail the update if notification fails
+      console.error("Error sending post update notifications:", error);
+    }
+
     return { post };
   },
 
@@ -330,6 +342,18 @@ export const postsService = {
 
     if (existingPost.userId !== userId) {
       throw new HttpError(403, "You can only delete your own posts");
+    }
+
+    // Notify users who have this post in their wishlist BEFORE deleting
+    try {
+      await notificationsService.sendPostDeleteNotification({
+        id: existingPost.id,
+        title: existingPost.title,
+        category: existingPost.category,
+      });
+    } catch (error) {
+      // Log error but don't fail the delete if notification fails
+      console.error("Error sending post delete notifications:", error);
     }
 
     // Delete post from database

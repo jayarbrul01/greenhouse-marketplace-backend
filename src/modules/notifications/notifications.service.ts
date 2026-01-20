@@ -63,7 +63,7 @@ export const notificationsService = {
             postId: post.id,
             category: post.category || "",
           },
-          tokens: usersWithFCMTokens.map((u) => u.fcmToken!).filter(Boolean) as string[],
+          tokens: usersWithFCMTokens.map((u: UserWithFCMToken) => u.fcmToken!).filter(Boolean) as string[],
         };
 
         // Send multicast message to users with FCM tokens
@@ -175,6 +175,183 @@ export const notificationsService = {
       return count;
     } catch (error: any) {
       console.error("Error fetching unread count:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Send notification to users who have a post in their wishlist when the post is updated
+   */
+  async sendPostUpdateNotification(post: {
+    id: string;
+    title: string;
+    category?: string | null;
+  }) {
+    try {
+      // Get all users who have this post in their wishlist
+      const wishlistItems = await prisma.wishlistItem.findMany({
+        where: {
+          postId: post.id,
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              fcmToken: true,
+            },
+          },
+        },
+      });
+
+      if (wishlistItems.length === 0) {
+        console.log(`[Notification Service] No users have post ${post.id} in their wishlist`);
+        return { sent: 0, failed: 0, inAppNotifications: 0 };
+      }
+
+      type UserWithFCM = {
+        id: string;
+        fcmToken: string | null;
+      };
+
+      const users: UserWithFCM[] = wishlistItems.map((item: { user: UserWithFCM }) => item.user);
+      const usersWithFCMTokens = users.filter((u: UserWithFCM) => u.fcmToken);
+
+      // Create in-app notifications for all users who have this post in wishlist
+      console.log(`[Notification Service] Creating update notifications for ${users.length} users for post: ${post.id}`);
+      const notificationPromises = users.map((user: UserWithFCM) =>
+        prisma.notification.create({
+          data: {
+            userId: user.id,
+            title: "Product Updated!",
+            message: `${post.title}${post.category ? ` - ${post.category}` : ""} has been updated`,
+            read: false,
+            postId: post.id,
+          },
+        })
+      );
+
+      const createdNotifications = await Promise.all(notificationPromises);
+      console.log(`[Notification Service] Successfully created ${createdNotifications.length} in-app notifications for post update`);
+
+      // Send FCM push notifications only to users with FCM tokens
+      let fcmResponse = { successCount: 0, failureCount: 0 };
+      if (usersWithFCMTokens.length > 0) {
+        const message = {
+          notification: {
+            title: "Product Updated!",
+            body: `${post.title}${post.category ? ` - ${post.category}` : ""} has been updated`,
+          },
+          data: {
+            type: "post_updated",
+            postId: post.id,
+            category: post.category || "",
+          },
+          tokens: usersWithFCMTokens.map((u: UserWithFCM) => u.fcmToken!).filter(Boolean) as string[],
+        };
+
+        // Send multicast message to users with FCM tokens
+        fcmResponse = await firebaseAdmin.messaging().sendEachForMulticast(message);
+        console.log(`Successfully sent FCM notifications for post update: ${fcmResponse.successCount}, Failed: ${fcmResponse.failureCount}`);
+      } else {
+        console.log("No users with FCM tokens found, skipping push notifications for post update");
+      }
+
+      return {
+        sent: fcmResponse.successCount,
+        failed: fcmResponse.failureCount,
+        inAppNotifications: users.length,
+      };
+    } catch (error: any) {
+      console.error("Error sending post update notifications:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Send notification to users who have a post in their wishlist when the post is deleted
+   */
+  async sendPostDeleteNotification(post: {
+    id: string;
+    title: string;
+    category?: string | null;
+  }) {
+    try {
+      // Get all users who have this post in their wishlist
+      const wishlistItems = await prisma.wishlistItem.findMany({
+        where: {
+          postId: post.id,
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              fcmToken: true,
+            },
+          },
+        },
+      });
+
+      if (wishlistItems.length === 0) {
+        console.log(`[Notification Service] No users have post ${post.id} in their wishlist`);
+        return { sent: 0, failed: 0, inAppNotifications: 0 };
+      }
+
+      type UserWithFCM = {
+        id: string;
+        fcmToken: string | null;
+      };
+
+      const users: UserWithFCM[] = wishlistItems.map((item: { user: UserWithFCM }) => item.user);
+      const usersWithFCMTokens = users.filter((u: UserWithFCM) => u.fcmToken);
+
+      // Create in-app notifications for all users who have this post in wishlist
+      console.log(`[Notification Service] Creating delete notifications for ${users.length} users for post: ${post.id}`);
+      const notificationPromises = users.map((user: UserWithFCM) =>
+        prisma.notification.create({
+          data: {
+            userId: user.id,
+            title: "Product Removed",
+            message: `${post.title}${post.category ? ` - ${post.category}` : ""} has been removed`,
+            read: false,
+            // Don't include postId since the post no longer exists
+            postId: null,
+          },
+        })
+      );
+
+      const createdNotifications = await Promise.all(notificationPromises);
+      console.log(`[Notification Service] Successfully created ${createdNotifications.length} in-app notifications for post deletion`);
+
+      // Send FCM push notifications only to users with FCM tokens
+      let fcmResponse = { successCount: 0, failureCount: 0 };
+      if (usersWithFCMTokens.length > 0) {
+        const message = {
+          notification: {
+            title: "Product Removed",
+            body: `${post.title}${post.category ? ` - ${post.category}` : ""} has been removed`,
+          },
+          data: {
+            type: "post_deleted",
+            postId: post.id,
+            category: post.category || "",
+          },
+          tokens: usersWithFCMTokens.map((u: UserWithFCM) => u.fcmToken!).filter(Boolean) as string[],
+        };
+
+        // Send multicast message to users with FCM tokens
+        fcmResponse = await firebaseAdmin.messaging().sendEachForMulticast(message);
+        console.log(`Successfully sent FCM notifications for post deletion: ${fcmResponse.successCount}, Failed: ${fcmResponse.failureCount}`);
+      } else {
+        console.log("No users with FCM tokens found, skipping push notifications for post deletion");
+      }
+
+      return {
+        sent: fcmResponse.successCount,
+        failed: fcmResponse.failureCount,
+        inAppNotifications: users.length,
+      };
+    } catch (error: any) {
+      console.error("Error sending post delete notifications:", error);
       throw error;
     }
   },

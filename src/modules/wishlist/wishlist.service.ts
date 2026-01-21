@@ -12,6 +12,11 @@ export const wishlistService = {
       throw new HttpError(404, "Post not found");
     }
 
+    // Check if user is trying to add their own product
+    if (post.userId === userId) {
+      throw new HttpError(400, "You cannot add your own products to your wishlist");
+    }
+
     // Check if already in wishlist
     const existing = await prisma.wishlistItem.findUnique({
       where: {
@@ -160,26 +165,39 @@ export const wishlistService = {
   },
 
   async getWishlistStatus(userId: string, postIds: string[]): Promise<Record<string, boolean>> {
-    const items = await prisma.wishlistItem.findMany({
-      where: {
-        userId,
-        postId: { in: postIds },
-      },
-      select: {
-        postId: true,
-      },
-    });
+    if (!postIds || postIds.length === 0) {
+      return {};
+    }
 
+    // Initialize all postIds as false
     const statusMap: Record<string, boolean> = {};
     postIds.forEach((postId: string) => {
       statusMap[postId] = false;
     });
 
-    items.forEach((item: { postId: string | null }) => {
-      if (item.postId) {
-        statusMap[item.postId] = true;
-      }
-    });
+    try {
+      const items: Array<{ postId: string | null }> = await prisma.wishlistItem.findMany({
+        where: {
+          userId,
+          postId: { 
+            in: postIds.filter(id => id && id.trim().length > 0) 
+          },
+        },
+        select: {
+          postId: true,
+        },
+      });
+
+      items.forEach((item) => {
+        if (item.postId && statusMap.hasOwnProperty(item.postId)) {
+          statusMap[item.postId] = true;
+        }
+      });
+    } catch (error: any) {
+      // If there's a database error, log it but return the default false status
+      console.error("Error fetching wishlist status:", error);
+      // Return all false statuses as fallback
+    }
 
     return statusMap;
   },

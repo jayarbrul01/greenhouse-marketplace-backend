@@ -14,6 +14,7 @@ import uploadRoutes from "./modules/posts/upload.routes.js";
 // import mediaRoutes from "./modules/media/media.routes.js";
 import wishlistRoutes from "./modules/wishlist/wishlist.routes.js";
 import { notificationsRoutes } from "./modules/notifications/notifications.routes.js";
+import advertisementsRoutes from "./modules/advertisements/advertisements.routes.js";
 // import searchRoutes from "./modules/search/search.routes.js";
 
 export const app = express();
@@ -43,6 +44,7 @@ app.use("/api/v1/upload", uploadRoutes);
 // app.use("/api/v1/media", mediaRoutes);
 app.use("/api/v1/wishlist", wishlistRoutes);
 app.use("/api/v1/notifications", notificationsRoutes);
+app.use("/api/v1/advertisements", advertisementsRoutes);
 // app.use("/api/v1/search", searchRoutes);
 
 app.use(errorMiddleware);

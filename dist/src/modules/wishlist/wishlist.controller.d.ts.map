@@ -1,1 +1,0 @@
-{"version":3,"file":"wishlist.controller.d.ts","sourceRoot":"","sources":["../../../../src/modules/wishlist/wishlist.controller.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,QAAQ,EAAE,MAAM,SAAS,CAAC;AACxC,OAAO,KAAK,EAAE,aAAa,EAAE,MAAM,sCAAsC,CAAC;AAG1E,eAAO,MAAM,kBAAkB;uBACJ,aAAa,OAAO,QAAQ;4BAYvB,aAAa,OAAO,QAAQ;yBAY/B,aAAa,OAAO,QAAQ;6BASxB,aAAa,OAAO,QAAQ;CAY5D,CAAC"}

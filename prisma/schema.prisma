@@ -55,6 +55,7 @@ model User {
   notifications Notification[]
   refreshTokens RefreshToken[]
   posts         Post[]
+  advertisements Advertisement[]
 }
 
 model Role {
@@ -200,4 +201,28 @@ model Post {
   @@index([createdAt])
   @@index([category])
   @@index([region])
+}
+
+model Advertisement {
+  id          String   @id @default(cuid())
+  userId      String?
+  businessName String
+  contactEmail String
+  contactPhone String?
+  bannerUrl   String
+  websiteUrl  String?
+  description String?
+  status      String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  startDate   DateTime?
+  endDate     DateTime?
+  clicks      Int      @default(0)
+  views       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
 }

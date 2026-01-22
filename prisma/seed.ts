@@ -8,24 +8,26 @@ import * as Prisma from "@prisma/client";
 const { PrismaClient } = Prisma as any;
 
 // Define RoleName type manually until Prisma Client is generated
-type RoleName = "BUYER" | "SELLER" | "WISHLIST";
+type RoleName = "BUYER" | "SELLER" | "WISHLIST" | "ADMIN";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
-  const roles: RoleName[] = ["BUYER", "SELLER", "WISHLIST"];
+  const roles: RoleName[] = ["BUYER", "SELLER", "WISHLIST", "ADMIN"];
 
   for (const name of roles) {
+    // Use type assertion to work around Prisma Client type checking
+    // This is needed until Prisma Client is regenerated after schema changes
     await prisma.role.upsert({
-      where: { name },
+      where: { name: name as any },
       update: {},
-      create: { name }
+      create: { name: name as any }
     });
   }
 
-  console.log("✅ Seeded roles");
+  console.log("✅ Seeded all roles:", roles.join(", "));
 }
 
 main()

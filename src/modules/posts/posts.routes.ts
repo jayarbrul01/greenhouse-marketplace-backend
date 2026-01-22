@@ -15,16 +15,16 @@ r.get("/:id", postsController.getPost);
 // All other routes require authentication
 r.use(requireAuth);
 
-// Create post - only SELLER role
-r.post("/", requireRole(["SELLER"]), validate(CreatePostSchema), postsController.createPost);
+// Create post - SELLER or ADMIN role
+r.post("/", requireRole(["SELLER", "ADMIN"]), validate(CreatePostSchema), postsController.createPost);
 
 // Get user's posts
 r.get("/", postsController.getUserPosts);
 
-// Update post - only SELLER role
-r.put("/:id", requireRole(["SELLER"]), validate(UpdatePostSchema), postsController.updatePost);
+// Update post - SELLER or ADMIN role
+r.put("/:id", requireRole(["SELLER", "ADMIN"]), validate(UpdatePostSchema), postsController.updatePost);
 
-// Delete post - only SELLER role
-r.delete("/:id", requireRole(["SELLER"]), postsController.deletePost);
+// Delete post - SELLER or ADMIN role
+r.delete("/:id", requireRole(["SELLER", "ADMIN"]), postsController.deletePost);
 
 export default r;

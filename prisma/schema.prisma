@@ -10,6 +10,7 @@ enum RoleName {
   BUYER
   SELLER
   WISHLIST
+  ADMIN
 }
 
 enum ListingType {

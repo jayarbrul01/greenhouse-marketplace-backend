@@ -14,8 +14,7 @@ r.post("/:id/view", advertisementsController.trackView);
 r.post("/:id/click", advertisementsController.trackClick);
 
 // Protected routes (admin only)
-// Note: For now using requireAuth. Add requireRole(["ADMIN"]) after adding ADMIN role to schema
-r.get("/", requireAuth, advertisementsController.getAllAdvertisements);
-r.patch("/:id", requireAuth, validate(UpdateAdvertisementSchema), advertisementsController.updateAdvertisement);
+r.get("/", requireAuth, requireRole(["ADMIN"]), advertisementsController.getAllAdvertisements);
+r.patch("/:id", requireAuth, requireRole(["ADMIN"]), validate(UpdateAdvertisementSchema), advertisementsController.updateAdvertisement);
 
 export default r;

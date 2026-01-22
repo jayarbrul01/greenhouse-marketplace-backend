@@ -21,10 +21,10 @@ export const postsService = {
     image?: string;
     video?: string;
   }) {
-    // Check if user has SELLER role
+    // Check if user has SELLER or ADMIN role
     const userRoles = await getUserRoles(input.userId);
-    if (!userRoles.includes("SELLER")) {
-      throw new HttpError(403, "Only users with SELLER role can create posts");
+    if (!userRoles.includes("SELLER") && !userRoles.includes("ADMIN")) {
+      throw new HttpError(403, "Only users with SELLER or ADMIN role can create posts");
     }
 
     // Create post in database using Prisma
@@ -276,10 +276,10 @@ export const postsService = {
     image?: string;
     video?: string;
   }) {
-    // Check if user has SELLER role
+    // Check if user has SELLER or ADMIN role
     const userRoles = await getUserRoles(userId);
-    if (!userRoles.includes("SELLER")) {
-      throw new HttpError(403, "Only users with SELLER role can update posts");
+    if (!userRoles.includes("SELLER") && !userRoles.includes("ADMIN")) {
+      throw new HttpError(403, "Only users with SELLER or ADMIN role can update posts");
     }
 
     // Check if post exists and belongs to user
@@ -291,7 +291,9 @@ export const postsService = {
       throw new HttpError(404, "Post not found");
     }
 
-    if (existingPost.userId !== userId) {
+    // Allow admins to update any post, regular users can only update their own
+    const isAdmin = userRoles.includes("ADMIN");
+    if (!isAdmin && existingPost.userId !== userId) {
       throw new HttpError(403, "You can only update your own posts");
     }
 
@@ -325,10 +327,10 @@ export const postsService = {
   },
 
   async deletePost(postId: string, userId: string) {
-    // Check if user has SELLER role
+    // Check if user has SELLER or ADMIN role
     const userRoles = await getUserRoles(userId);
-    if (!userRoles.includes("SELLER")) {
-      throw new HttpError(403, "Only users with SELLER role can delete posts");
+    if (!userRoles.includes("SELLER") && !userRoles.includes("ADMIN")) {
+      throw new HttpError(403, "Only users with SELLER or ADMIN role can delete posts");
     }
 
     // Check if post exists and belongs to user
@@ -340,7 +342,9 @@ export const postsService = {
       throw new HttpError(404, "Post not found");
     }
 
-    if (existingPost.userId !== userId) {
+    // Allow admins to delete any post, regular users can only delete their own
+    const isAdmin = userRoles.includes("ADMIN");
+    if (!isAdmin && existingPost.userId !== userId) {
       throw new HttpError(403, "You can only delete your own posts");
     }
 
